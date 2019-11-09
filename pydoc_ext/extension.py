@@ -50,6 +50,22 @@ def iter_all_modules():
         yield modname
 
 
+def filter_nested_patterns(modnames, patterns):
+    name_depth = len(patterns)
+    filtered = set()
+    filtered_shallow = set()
+    regexes = [arg_to_regex(p) for p in patterns]
+    for modname in modnames:
+        names = modname.split(".")
+        if all(re.match(rex, name, re.IGNORECASE) for rex, name in zip(regexes, names)):
+            trunc_name = ".".join(names[:name_depth])
+            if len(names) == name_depth:
+                filtered.add(trunc_name)
+            else:
+                filtered_shallow.add(trunc_name)
+    return list(filtered) if filtered else list(filtered_shallow)
+
+
 # pylint: disable=too-few-public-methods
 class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
@@ -66,14 +82,10 @@ class KeywordQueryEventListener(EventListener):
         if not arg:
             return DoNothingAction()
 
-        pattern = arg_to_regex(arg)
+        patterns = arg.split(".")
 
         # Find all accessible modules
-        modules = [
-            modname
-            for modname in iter_all_modules()
-            if re.match(pattern, modname, re.IGNORECASE)
-        ]
+        modules = filter_nested_patterns(iter_all_modules(), patterns)
 
         items = []
         for modname in modules[:MAX_RESULTS_VISIBLE]:
