@@ -1,0 +1,18 @@
+{
+  "required_api_version": "^2.0.0",
+  "name": "pydoc",
+  "description": "Search Python documentation.",
+  "developer_name": "Peter Bakhirev",
+  "icon": "images/pydoc.svg",
+  "options": {
+    "query_debounce": 0.1
+  },
+  "preferences": [
+    {
+      "id": "search",
+      "type": "keyword",
+      "name": "Search pydoc",
+      "default_value": "pyd"
+    }
+  ]
+}
