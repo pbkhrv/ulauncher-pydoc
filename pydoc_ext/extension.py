@@ -5,6 +5,7 @@ import sys
 import re
 import pkgutil
 import pydoc
+from typing import NamedTuple
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent, ItemEnterEvent
@@ -37,7 +38,11 @@ def arg_to_regex(arg):
 
 
 def iter_all_modules():
-    def ignore(*args, **kwargs):
+    """
+    Enumerate all accessible Python modules
+    """
+
+    def ignore(_):
         pass
 
     # Built-in modules first
@@ -50,20 +55,63 @@ def iter_all_modules():
         yield modname
 
 
-def filter_nested_patterns(modnames, patterns):
-    name_depth = len(patterns)
-    filtered = set()
-    filtered_shallow = set()
+class SearchResultItem(NamedTuple):
+    """
+    Python nuggets.
+    """
+
+    name: str
+    description: str
+    pydoc_url: str
+    name_depth: int
+    basename_exact_match: bool
+
+
+def filter_modnames_by_patterns(modnames, patterns):
+    """
+    Match given module names against the nested search pattern.
+    Return meta data about every match.
+    """
+    # How many levels deep we are searching:
+    # "apt" is 1 level deep
+    # "mod.submod.whatever" is 3 levels deep
+    search_depth = len(patterns)
+
+    # Turn each pattern into a regex that we can match
     regexes = [arg_to_regex(p) for p in patterns]
+
+    # Basename is the same concept as in file paths:
+    # If module is named "mod.submod.whatever" then its basename is "mod.submod"
+    basename_pattern_exact = ".".join(patterns[:-1])
     for modname in modnames:
-        names = modname.split(".")
-        if all(re.match(rex, name, re.IGNORECASE) for rex, name in zip(regexes, names)):
-            trunc_name = ".".join(names[:name_depth])
-            if len(names) == name_depth:
-                filtered.add(trunc_name)
-            else:
-                filtered_shallow.add(trunc_name)
-    return list(filtered) if filtered else list(filtered_shallow)
+        name_chunks = modname.split(".")
+        basename = ".".join(name_chunks[: search_depth - 1]).lower()
+        basename_exact_match = search_depth > 1 and basename == basename_pattern_exact
+        if all(
+            re.match(rex, chunk, re.IGNORECASE)
+            for rex, chunk in zip(regexes, name_chunks)
+        ):
+            yield SearchResultItem(
+                name=modname,
+                description=modname,
+                pydoc_url=f"{modname}.html",
+                name_depth=len(name_chunks),
+                basename_exact_match=basename_exact_match,
+            )
+
+
+def result_sort_key(item):
+    return (item.basename_exact_match, item.name_depth, item.name)
+
+
+def search_modules(patterns):
+    search_depth = len(patterns)
+    result_items = [
+        item
+        for item in filter_modnames_by_patterns(iter_all_modules(), patterns)
+        if item.name_depth <= search_depth
+    ]
+    return sorted(result_items, key=result_sort_key, reverse=True)
 
 
 # pylint: disable=too-few-public-methods
@@ -85,16 +133,16 @@ class KeywordQueryEventListener(EventListener):
         patterns = arg.split(".")
 
         # Find all accessible modules
-        modules = filter_nested_patterns(iter_all_modules(), patterns)
+        results = search_modules(patterns)
 
         items = []
-        for modname in modules[:MAX_RESULTS_VISIBLE]:
-            url = f"{extension.pydoc_server_url}{modname}.html"
+        for res in results[:MAX_RESULTS_VISIBLE]:
+            url = f"{extension.pydoc_server_url}{res.pydoc_url}"
             items.append(
                 ExtensionResultItem(
                     icon="images/item.svg",
-                    name=modname,
-                    description=modname,
+                    name=res.name,
+                    description=res.description,
                     on_enter=OpenUrlAction(url),
                 )
             )
