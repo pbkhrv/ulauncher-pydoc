@@ -1,9 +1,12 @@
 """
-pydoc search extension
+Show documentation for installed Python packages and modules
+
+Displays documentation in the browser using Python pydoc's built-in HTTP server
 """
 import sys
 import pkgutil
 from typing import NamedTuple
+from functools import lru_cache
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent
@@ -15,7 +18,7 @@ from ulauncher.api.shared.action.OpenUrlAction import OpenUrlAction
 from ulauncher.utils import fuzzy_search
 
 
-MAX_RESULTS_VISIBLE = 10
+MAX_RESULTS_VISIBLE = 9
 
 
 class PydocExtension(Extension):
@@ -145,6 +148,29 @@ def count_top_level_modnames():
     return cnt
 
 
+@lru_cache(maxsize=128)
+def get_module_description(modname, max_lines=5):
+    """
+    Attempt to get the module docstring and use it as description for search results
+    """
+    doc = ""
+    name_chunks = modname.split(".")
+    if len(name_chunks) > 1:
+        tail = name_chunks[-1]
+        mod = __import__(modname)
+        doc = getattr(mod, tail).__doc__
+    if not doc:
+        doc = __import__(modname).__doc__ or ""
+    lines = doc.splitlines()[:max_lines]
+    desc = ""
+    for line in lines:
+        if not line and desc:
+            return desc
+        desc += "\n" if desc else ""
+        desc += line
+    return desc
+
+
 # pylint: disable=too-few-public-methods
 class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
@@ -180,7 +206,7 @@ class KeywordQueryEventListener(EventListener):
                 ExtensionResultItem(
                     icon="images/python-module.svg",
                     name=res.name,
-                    description=res.name,
+                    description=get_module_description(res.name),
                     on_enter=OpenUrlAction(url),
                 )
             )
