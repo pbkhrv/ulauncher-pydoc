@@ -1,1 +1,1 @@
-watchexec -c -w notesnv -w tests make test
+watchexec -c -w pydoc_ext -w tests make test

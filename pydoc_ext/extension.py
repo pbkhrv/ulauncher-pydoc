@@ -2,19 +2,17 @@
 pydoc search extension
 """
 import sys
-import re
 import pkgutil
-import pydoc
 from typing import NamedTuple
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
-from ulauncher.api.shared.event import KeywordQueryEvent, ItemEnterEvent
+from ulauncher.api.shared.event import KeywordQueryEvent
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
 from ulauncher.api.shared.item.ExtensionSmallResultItem import ExtensionSmallResultItem
 from ulauncher.api.shared.action.RenderResultListAction import RenderResultListAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.OpenUrlAction import OpenUrlAction
-from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
+from ulauncher.utils import fuzzy_search
 
 
 MAX_RESULTS_VISIBLE = 10
@@ -31,15 +29,9 @@ class PydocExtension(Extension):
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
 
 
-def arg_to_regex(arg):
-    arg = arg.strip(" ")
-    args = re.split(r"\s+", arg)
-    return ".*?" + ".+?".join(args) + ".*"
-
-
 def iter_all_modules():
     """
-    Enumerate all accessible Python modules
+    Enumerate all accessible Python modules.
     """
 
     def ignore(_):
@@ -57,69 +49,105 @@ def iter_all_modules():
 
 class SearchResultItem(NamedTuple):
     """
-    Python nuggets.
+    Module info and match scores.
     """
 
     name: str
-    description: str
     pydoc_url: str
     name_depth: int
-    basename_exact_match: bool
+    # How well the basename matches the query, using Ulauncher's algo
+    basename_match_score: float
+    basename_exact_match: int
+    # How well the last part of the name matches the query, using Ulauncher's algo
+    leafname_match_score: float
 
 
-def filter_modnames_by_patterns(modnames, patterns):
+def score_modname_query_match(modname_chunks, query_chunks, basename_query):
     """
-    Match given module names against the nested search pattern.
-    Return meta data about every match.
+    Score how well given modname matches given query using Ulauncher fuzzy search algo
     """
-    # How many levels deep we are searching:
-    # "apt" is 1 level deep
-    # "mod.submod.whatever" is 3 levels deep
-    search_depth = len(patterns)
+    # Basename match only matters if our search query includes one
+    if len(query_chunks) > 1:
+        basename = ".".join(modname_chunks[: len(query_chunks) - 1])
+        basename_match_score = fuzzy_search.get_score(basename_query, basename)
+    else:
+        basename_match_score = 0
 
-    # Turn each pattern into a regex that we can match
-    regexes = [arg_to_regex(p) for p in patterns]
+    # The last part of the name match is only relevant
+    # if this modname has at least that many parts
+    if len(modname_chunks) >= len(query_chunks):
+        leafname_match_score = fuzzy_search.get_score(
+            query_chunks[len(query_chunks) - 1], modname_chunks[len(query_chunks) - 1]
+        )
+    else:
+        leafname_match_score = 0
 
-    # Basename is the same concept as in file paths:
-    # If module is named "mod.submod.whatever" then its basename is "mod.submod"
-    basename_pattern_exact = ".".join(patterns[:-1])
-    for modname in modnames:
-        name_chunks = modname.split(".")
-        basename = ".".join(name_chunks[: search_depth - 1]).lower()
-        basename_exact_match = search_depth > 1 and basename == basename_pattern_exact
-        if all(
-            re.match(rex, chunk, re.IGNORECASE)
-            for rex, chunk in zip(regexes, name_chunks)
-        ):
-            yield SearchResultItem(
-                name=modname,
-                description=modname,
-                pydoc_url=f"{modname}.html",
-                name_depth=len(name_chunks),
-                basename_exact_match=basename_exact_match,
+    return (basename_match_score, leafname_match_score)
+
+
+def result_sort_key(result_item):
+    """
+    Ranking of modname matches.
+    """
+
+    return (
+        result_item.basename_exact_match,
+        result_item.basename_match_score,
+        result_item.leafname_match_score,
+        result_item.name_depth,
+        result_item.name,
+    )
+
+
+def search_modules(query, all_modnames):
+    """
+    Match all accessible modules against the query. Rank and sort results.
+    """
+
+    query_chunks = query.lower().split(".")
+
+    # Basename means similar thing it does for files:
+    # it's all the parts of the name up to the very last one.
+    # Example: for a module named "mod.submod.blah", basename is "mod.submod"
+    basename_query = ".".join(query_chunks[:-1])
+
+    result_items = list()
+    for modname in all_modnames:
+        modname_chunks = modname.lower().split(".")
+        basename = ".".join(modname_chunks[:-1])
+        # Don't show modnames that have more parts than the search query
+        if len(modname_chunks) <= len(query_chunks):
+            basename_match_score, leafname_match_score = score_modname_query_match(
+                modname_chunks, query_chunks, basename_query
+            )
+            result_items.append(
+                SearchResultItem(
+                    name=modname,
+                    pydoc_url=f"{modname}.html",
+                    name_depth=len(modname_chunks),
+                    basename_match_score=basename_match_score,
+                    basename_exact_match=1 if basename == basename_query else 0,
+                    leafname_match_score=leafname_match_score,
+                )
             )
 
-
-def result_sort_key(item):
-    return (item.basename_exact_match, item.name_depth, item.name)
-
-
-def search_modules(patterns):
-    search_depth = len(patterns)
-    result_items = [
-        item
-        for item in filter_modnames_by_patterns(iter_all_modules(), patterns)
-        if item.name_depth <= search_depth
-    ]
     return sorted(result_items, key=result_sort_key, reverse=True)
+
+
+def count_top_level_modnames():
+    """
+    Count all top-level (without submodules and subpackages) modnames
+    """
+    cnt = 0
+    for modname in iter_all_modules():
+        if "." not in modname:
+            cnt += 1
+    return cnt
 
 
 # pylint: disable=too-few-public-methods
 class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
-
-    def __init__(self):
-        super(KeywordQueryEventListener, self).__init__()
 
     def on_event(self, event, extension):
         """
@@ -128,22 +156,41 @@ class KeywordQueryEventListener(EventListener):
         # assuming only one ulauncher keyword
         arg = event.get_argument()
         if not arg:
-            return DoNothingAction()
+            return RenderResultListAction(
+                [
+                    ExtensionResultItem(
+                        icon="images/enter-query.svg",
+                        name="Please enter search query...",
+                        description=(
+                            f"Found {count_top_level_modnames()} "
+                            "top level packages and modules"
+                        ),
+                        on_enter=DoNothingAction(),
+                    )
+                ]
+            )
 
-        patterns = arg.split(".")
-
-        # Find all accessible modules
-        results = search_modules(patterns)
+        # Find all accessible modules that match the query
+        results = search_modules(arg, iter_all_modules())
 
         items = []
         for res in results[:MAX_RESULTS_VISIBLE]:
             url = f"{extension.pydoc_server_url}{res.pydoc_url}"
             items.append(
                 ExtensionResultItem(
-                    icon="images/item.svg",
+                    icon="images/python-module.svg",
                     name=res.name,
-                    description=res.description,
+                    description=res.name,
                     on_enter=OpenUrlAction(url),
+                )
+            )
+        if len(results) > MAX_RESULTS_VISIBLE:
+            count_not_shown = len(results) - MAX_RESULTS_VISIBLE
+            items.append(
+                ExtensionSmallResultItem(
+                    icon="images/empty.png",
+                    name=f"{count_not_shown} more results not shown..",
+                    on_enter=DoNothingAction(),
                 )
             )
 
