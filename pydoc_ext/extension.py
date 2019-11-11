@@ -153,21 +153,24 @@ def get_module_description(modname, max_lines=5):
     """
     Attempt to get the module docstring and use it as description for search results
     """
-    doc = ""
-    name_chunks = modname.split(".")
-    if len(name_chunks) > 1:
-        tail = name_chunks[-1]
-        mod = __import__(modname)
-        doc = getattr(mod, tail).__doc__
-    if not doc:
-        doc = __import__(modname).__doc__ or ""
-    lines = doc.splitlines()[:max_lines]
     desc = ""
-    for line in lines:
-        if not line and desc:
-            return desc
-        desc += "\n" if desc else ""
-        desc += line
+    try:
+        doc = ""
+        name_chunks = modname.split(".")
+        if len(name_chunks) > 1:
+            tail = name_chunks[-1]
+            mod = __import__(modname)
+            doc = getattr(mod, tail).__doc__
+        if not doc:
+            doc = __import__(modname).__doc__ or ""
+        lines = doc.splitlines()[:max_lines]
+        for line in lines:
+            if not line and desc:
+                return desc
+            desc += "\n" if desc else ""
+            desc += line
+    except Exception:  # pylint: disable=broad-except
+        pass
     return desc
 
 
