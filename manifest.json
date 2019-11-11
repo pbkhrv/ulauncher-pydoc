@@ -3,7 +3,7 @@
   "name": "pydoc",
   "description": "Search Python documentation.",
   "developer_name": "Peter Bakhirev",
-  "icon": "images/pydoc.svg",
+  "icon": "images/python.svg",
   "options": {
     "query_debounce": 0.1
   },

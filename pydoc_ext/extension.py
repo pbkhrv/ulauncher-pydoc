@@ -7,6 +7,7 @@ import sys
 import pkgutil
 from typing import NamedTuple
 from functools import lru_cache
+import platform
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent
@@ -174,6 +175,17 @@ def get_module_description(modname, max_lines=5):
     return desc
 
 
+def get_python_version():
+    """
+    Python version string
+    """
+    return "{} [{}, {}]".format(
+        platform.python_version(),
+        platform.python_build()[0],
+        platform.python_compiler(),
+    )
+
+
 # pylint: disable=too-few-public-methods
 class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
@@ -188,14 +200,19 @@ class KeywordQueryEventListener(EventListener):
             return RenderResultListAction(
                 [
                     ExtensionResultItem(
-                        icon="images/enter-query.svg",
-                        name="Please enter search query...",
-                        description=(
-                            f"Found {count_top_level_modnames()} "
-                            "top level packages and modules"
-                        ),
+                        icon="images/python.svg",
+                        name=f"Python version: {get_python_version()}",
                         on_enter=DoNothingAction(),
-                    )
+                    ),
+                    ExtensionResultItem(
+                        icon="images/enter-query.svg",
+                        name=(
+                            "Top level packages and modules found: "
+                            f"{count_top_level_modnames()}"
+                        ),
+                        description="Please enter search query to begin...",
+                        on_enter=DoNothingAction(),
+                    ),
                 ]
             )
 
