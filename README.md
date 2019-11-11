@@ -29,3 +29,30 @@ Open Ulauncher preferences window -> Extensions -> "Add extension" and paste the
 ```
 https://github.com/pbkhrv/ulauncher-pydoc
 ```
+
+
+## Development
+
+Install necessary packages:
+
+`pip install -r dev/requirements.txt`
+
+Run unit tests:
+
+`make test`
+
+Quit Ulauncher. Then run it in debug mode:
+
+`make run_ul`
+
+Run extension in the terminal, connecting to Ulauncher in debug mode:
+
+`make run`
+
+(if that doesn't work, check the connection string URL printed out by Ulauncher and modify the Makefile accordingly.)
+
+**Contributions are welcome!**
+
+## License
+
+[MIT license](LICENSE)
