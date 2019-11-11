@@ -1,6 +1,6 @@
 {
   "required_api_version": "^2.0.0",
-  "name": "pydoc",
+  "name": "PyDoc",
   "description": "Search Python documentation.",
   "developer_name": "Peter Bakhirev",
   "icon": "images/python.svg",
