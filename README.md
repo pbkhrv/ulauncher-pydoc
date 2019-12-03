@@ -35,7 +35,7 @@ https://github.com/pbkhrv/ulauncher-pydoc
 
 Install necessary packages:
 
-`pip install -r dev/requirements.txt`
+`pip install -r scripts/requirements.txt`
 
 Run unit tests:
 
