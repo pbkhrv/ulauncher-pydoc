@@ -1,3 +1,7 @@
+"""
+Main entrypoint of the extension.
+
+"""
 import signal
 import sys
 from pydoc import _start_server, _url_handler
@@ -13,9 +17,12 @@ def shutdown_and_exit(serverthread):
     sys.exit(0)
 
 
-if __name__ == "__main__":
+def main():
+    """
+    Launch the pydoc http server and the extension
+    """
     # The first module walk is slow - later ones will be much faster
-    for modname in iter_all_modules():
+    for _ in iter_all_modules():
         pass
 
     # Launch the pydoc HTTP server on random port
@@ -29,3 +36,6 @@ if __name__ == "__main__":
 
     # Shutdown
     shutdown_and_exit(serverthread)
+
+if __name__ == "__main__":
+    main()
