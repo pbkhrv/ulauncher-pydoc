@@ -210,6 +210,7 @@ def show_empty_query_results() -> RenderResultListAction:
                 icon="images/python.svg",
                 name=f"Python version: {get_python_version()}",
                 on_enter=DoNothingAction(),
+                highlightable=False,
             ),
             ExtensionResultItem(
                 icon="images/enter-query.svg",
@@ -219,6 +220,7 @@ def show_empty_query_results() -> RenderResultListAction:
                 ),
                 description="Please enter search query to begin...",
                 on_enter=DoNothingAction(),
+                highlightable=False,
             ),
         ]
     )
@@ -285,6 +287,7 @@ class KeywordQueryEventListener(EventListener):
                     icon="images/empty.png",
                     name=f"{count_not_shown} more results not shown..",
                     on_enter=DoNothingAction(),
+                    highlightable=False,
                 )
             )
 
