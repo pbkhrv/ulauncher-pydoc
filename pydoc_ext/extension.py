@@ -5,12 +5,13 @@ Displays documentation in the browser using Python pydoc's built-in HTTP server
 """
 import sys
 import pkgutil
-from typing import NamedTuple, Iterable, Tuple, List, Type, Union
+from typing import NamedTuple, Iterable, Tuple, List, Type, Optional
 from functools import lru_cache
 import platform
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent
+from ulauncher.api.shared.item.ResultItem import ResultItem
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
 from ulauncher.api.shared.item.ExtensionSmallResultItem import ExtensionSmallResultItem
 from ulauncher.api.shared.action.BaseAction import BaseAction
@@ -226,13 +227,30 @@ def show_empty_query_results() -> RenderResultListAction:
     )
 
 
-def get_mod_file_path(mod_query: str) -> Union[str, None]:
+def get_mod_source_path(mod_query: str) -> Optional[str]:
     """
     Get the path to the module Python file
     """
     modname = mod_query.rstrip(".")
     module = sys.modules.get(modname, None)
     return module.__file__ if module else None
+
+
+def items_open_source_file(mod_query: str) -> List[Type[ResultItem]]:
+    """
+    Find corresponding source file and show an "Open ....py" result item
+    """
+    mod_path = get_mod_source_path(mod_query)
+    if mod_path:
+        return [
+            ExtensionSmallResultItem(
+                icon="images/enter-query.svg",
+                name=f"Open {mod_path}",
+                on_enter=OpenAction(mod_path),
+                highlightable=False,
+            )
+        ]
+    return []
 
 
 # pylint: disable=too-few-public-methods
@@ -256,18 +274,9 @@ class KeywordQueryEventListener(EventListener):
 
         items = []
 
-        # Offer to open exactly matching module file in text editor
+        # Offer to open the matching module source file in text editor
         if has_exact_match:
-            mod_path = get_mod_file_path(arg)
-            if mod_path:
-                items.append(
-                    ExtensionSmallResultItem(
-                        icon="images/enter-query.svg",
-                        name=f"Open {mod_path}",
-                        on_enter=OpenAction(mod_path),
-                        highlightable=False,
-                    )
-                )
+            items += items_open_source_file(arg)
 
         for res in results[:MAX_RESULTS_VISIBLE]:
             url = f"{extension.pydoc_server_url}{res.pydoc_url}"
@@ -280,6 +289,7 @@ class KeywordQueryEventListener(EventListener):
                     on_alt_enter=SetUserQueryAction(f"{kw} {res.name}."),
                 )
             )
+
         if len(results) > MAX_RESULTS_VISIBLE:
             count_not_shown = len(results) - MAX_RESULTS_VISIBLE
             items.append(
