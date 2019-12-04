@@ -55,13 +55,12 @@ def iter_all_modules() -> Iterable[str]:
         yield modname
 
 
-class SearchResultItem(NamedTuple):
+class NestedNameSearchResultItem(NamedTuple):
     """
-    Module info and match scores.
+    Ranking scores for the "nested names" search mode
     """
 
-    name: str
-    pydoc_url: str
+    module_name: str
     name_depth: int
     name_exact_match: int
     # How well the basename matches the query, using Ulauncher's algo
@@ -69,6 +68,16 @@ class SearchResultItem(NamedTuple):
     basename_exact_match: int
     # How well the last part of the name matches the query, using Ulauncher's algo
     leafname_match_score: float
+
+
+class FullNameSearchResultItem(NamedTuple):
+    """
+    Ranking scores for the "full names" search mode
+    """
+
+    module_name: str
+    head_match_score: float
+    tail_match_score: float
 
 
 def score_modname_query_match(
@@ -96,26 +105,38 @@ def score_modname_query_match(
     return (basename_match_score, leafname_match_score)
 
 
-def result_sort_key(result_item: SearchResultItem) -> Tuple:
-    """
-    Ranking of modname matches.
-    """
-
-    return (
-        result_item.name_exact_match,
-        result_item.basename_exact_match,
-        result_item.basename_match_score,
-        result_item.leafname_match_score,
-        result_item.name_depth,
-        result_item.name,
-    )
-
-
-def search_modules(
+def search_modules_nested(
     query: str, all_modnames: Iterable[str]
-) -> Tuple[bool, List[SearchResultItem]]:
+) -> Tuple[bool, List[str]]:
     """
-    Match all accessible modules against the query. Rank and sort results.
+    Search all accessible module/package names, rank and sort results.
+
+    "Nested" means sub-module and sub-package names separated by dots.
+    To keep the result list noise-free, we filter out names with more levels
+    of sub-names than the query has:
+
+    >>> search_modules_nested('htt', ['http', 'http.client', 'http.client.boo'])
+    (False, ['http'])
+
+    Returns True if the query matches some name exactly:
+
+    >>> search_modules_nested('http', ['http', 'http.client'])
+    (True, ['http'])
+
+    Dots separate nested names, following the Python syntax:
+
+    >>> search_modules_nested('http.', ['http', 'http.client', 'http.client.boo'])
+    (True, ['http', 'http.client'])
+
+    Exact query matches are ranked highest:
+
+    >>> search_modules_nested('http', ['http2lib', 'http'])
+    (True, ['http', 'http2lib'])
+
+    Module's "basename" exact matches are ranked higher than other fuzzy matches:
+
+    >>> search_modules_nested('http.se', ['http.cli', 'httplib2.boo'])
+    (False, ['http.cli', 'httplib2.boo'])
     """
 
     query_chunks = query.lower().split(".")
@@ -139,9 +160,8 @@ def search_modules(
                 modname_chunks, query_chunks, basename_query
             )
             result_items.append(
-                SearchResultItem(
-                    name=modname,
-                    pydoc_url=f"{modname}.html",
+                NestedNameSearchResultItem(
+                    module_name=modname,
                     name_depth=len(modname_chunks),
                     name_exact_match=1 if modname == exact_match_query else 0,
                     basename_match_score=basename_match_score,
@@ -150,7 +170,27 @@ def search_modules(
                 )
             )
 
-    return (has_exact_match, sorted(result_items, key=result_sort_key, reverse=True))
+    def sort_key(item):
+        return (
+            item.name_exact_match,
+            item.basename_exact_match,
+            item.basename_match_score,
+            item.leafname_match_score,
+            item.name_depth,
+            item.module_name,
+        )
+
+    names = [
+        res.module_name for res in sorted(result_items, key=sort_key, reverse=True)
+    ]
+    return (has_exact_match, names)
+
+
+# def search_modules_full(query: str, all_modnames: Iterable[str]) -> List[str]:
+#    """
+#    Search full module names, not restricted by nesting level of the query.
+#    Rank and sort the results.
+#    """
 
 
 def count_top_level_modnames() -> int:
@@ -270,7 +310,7 @@ class KeywordQueryEventListener(EventListener):
             return show_empty_query_results()
 
         # Find all accessible modules that match the query
-        has_exact_match, results = search_modules(arg, iter_all_modules())
+        has_exact_match, names = search_modules_nested(arg, iter_all_modules())
 
         items = []
 
@@ -278,20 +318,20 @@ class KeywordQueryEventListener(EventListener):
         if has_exact_match:
             items += items_open_source_file(arg)
 
-        for res in results[:MAX_RESULTS_VISIBLE]:
-            url = f"{extension.pydoc_server_url}{res.pydoc_url}"
+        for name in names[:MAX_RESULTS_VISIBLE]:
+            url = f"{extension.pydoc_server_url}{name}.html"
             items.append(
                 ExtensionResultItem(
                     icon="images/python-module.svg",
-                    name=res.name,
-                    description=get_module_description(res.name),
+                    name=name,
+                    description=get_module_description(name),
                     on_enter=OpenUrlAction(url),
-                    on_alt_enter=SetUserQueryAction(f"{kw} {res.name}."),
+                    on_alt_enter=SetUserQueryAction(f"{kw} {name}."),
                 )
             )
 
-        if len(results) > MAX_RESULTS_VISIBLE:
-            count_not_shown = len(results) - MAX_RESULTS_VISIBLE
+        if len(names) > MAX_RESULTS_VISIBLE:
+            count_not_shown = len(names) - MAX_RESULTS_VISIBLE
             items.append(
                 ExtensionSmallResultItem(
                     icon="images/empty.png",
