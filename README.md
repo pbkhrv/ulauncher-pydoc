@@ -41,6 +41,10 @@ Run unit tests:
 
 `make test`
 
+Backup the "production" version of the extension and symlink the development versioninto the Ulauncher's extension directory:
+
+`make symlink`
+
 Quit Ulauncher. Then run it in debug mode:
 
 `make run_ul`
@@ -50,6 +54,10 @@ Run extension in the terminal, connecting to Ulauncher in debug mode:
 `make run`
 
 (if that doesn't work, check the connection string URL printed out by Ulauncher and modify the Makefile accordingly.)
+
+Unlink the development version of the extension from Ulauncher and replace it with whatever was there before:
+
+`make unlink`
 
 **Contributions are welcome!**
 
