@@ -1,6 +1,6 @@
 # ulauncher-pydoc
 
-A [Ulauncher](https://ulauncher.io/) extension to search and view installed Python modules' and packages' built-in documentation. Uses the `pydoc` module that comes with Python to generate the documentation and make it available via HTTP.
+A [Ulauncher](https://ulauncher.io/) extension to search and view installed Python modules' and packages' built-in documentation. Uses the `pydoc` package that comes with Python to generate the documentation and make it available via HTTP.
 
 
 ## Usage
@@ -9,11 +9,13 @@ Open Ulauncher and type in "pyd " to start the extension. If everything is confi
 
 ![All modules, no query](images/screenshots/empty-query.png)
 
-Start typing a search query to get search results. It uses the same fuzzy string search algorithm as Ulauncher itself.
+Start typing a query to search for a matching package or module name. It uses the same fuzzy string search algorithm as Ulauncher itself.
 
 ![Query 1](images/screenshots/search-query1.png)
 
-Use dot `.` to search submodules and nested packages:
+Type in `.` (dot) after the package name to search submodules and nested packages, or press Alt+Enter to complete the name of the selected search result item.
+
+Whenever there's an exact match on the query, you can choose to open that module's source file in your default editor:
 
 ![Query 2](images/screenshots/search-query2.png)
 
