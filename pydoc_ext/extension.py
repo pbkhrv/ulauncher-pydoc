@@ -5,7 +5,7 @@ Displays documentation in the browser using Python pydoc's built-in HTTP server
 """
 import sys
 import pkgutil
-from typing import NamedTuple
+from typing import NamedTuple, Iterable, Tuple, List, Type, Union
 from functools import lru_cache
 import platform
 from ulauncher.api.client.Extension import Extension
@@ -13,9 +13,12 @@ from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
 from ulauncher.api.shared.item.ExtensionSmallResultItem import ExtensionSmallResultItem
+from ulauncher.api.shared.action.BaseAction import BaseAction
 from ulauncher.api.shared.action.RenderResultListAction import RenderResultListAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.OpenUrlAction import OpenUrlAction
+from ulauncher.api.shared.action.OpenAction import OpenAction
+from ulauncher.api.shared.action.SetUserQueryAction import SetUserQueryAction
 from ulauncher.utils import fuzzy_search
 
 
@@ -33,7 +36,7 @@ class PydocExtension(Extension):
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
 
 
-def iter_all_modules():
+def iter_all_modules() -> Iterable[str]:
     """
     Enumerate all accessible Python modules.
     """
@@ -59,6 +62,7 @@ class SearchResultItem(NamedTuple):
     name: str
     pydoc_url: str
     name_depth: int
+    name_exact_match: int
     # How well the basename matches the query, using Ulauncher's algo
     basename_match_score: float
     basename_exact_match: int
@@ -66,7 +70,9 @@ class SearchResultItem(NamedTuple):
     leafname_match_score: float
 
 
-def score_modname_query_match(modname_chunks, query_chunks, basename_query):
+def score_modname_query_match(
+    modname_chunks: List[str], query_chunks: List[str], basename_query: str
+) -> Tuple[float, float]:
     """
     Score how well given modname matches given query using Ulauncher fuzzy search algo
     """
@@ -89,12 +95,13 @@ def score_modname_query_match(modname_chunks, query_chunks, basename_query):
     return (basename_match_score, leafname_match_score)
 
 
-def result_sort_key(result_item):
+def result_sort_key(result_item: SearchResultItem) -> Tuple:
     """
     Ranking of modname matches.
     """
 
     return (
+        result_item.name_exact_match,
         result_item.basename_exact_match,
         result_item.basename_match_score,
         result_item.leafname_match_score,
@@ -103,12 +110,16 @@ def result_sort_key(result_item):
     )
 
 
-def search_modules(query, all_modnames):
+def search_modules(
+    query: str, all_modnames: Iterable[str]
+) -> Tuple[bool, List[SearchResultItem]]:
     """
     Match all accessible modules against the query. Rank and sort results.
     """
 
     query_chunks = query.lower().split(".")
+    exact_match_query = query.lower().rstrip(".")
+    has_exact_match = False
 
     # Basename means similar thing it does for files:
     # it's all the parts of the name up to the very last one.
@@ -117,6 +128,8 @@ def search_modules(query, all_modnames):
 
     result_items = list()
     for modname in all_modnames:
+        if modname == exact_match_query:
+            has_exact_match = True
         modname_chunks = modname.lower().split(".")
         basename = ".".join(modname_chunks[:-1])
         # Don't show modnames that have more parts than the search query
@@ -129,16 +142,17 @@ def search_modules(query, all_modnames):
                     name=modname,
                     pydoc_url=f"{modname}.html",
                     name_depth=len(modname_chunks),
+                    name_exact_match=1 if modname == exact_match_query else 0,
                     basename_match_score=basename_match_score,
                     basename_exact_match=1 if basename == basename_query else 0,
                     leafname_match_score=leafname_match_score,
                 )
             )
 
-    return sorted(result_items, key=result_sort_key, reverse=True)
+    return (has_exact_match, sorted(result_items, key=result_sort_key, reverse=True))
 
 
-def count_top_level_modnames():
+def count_top_level_modnames() -> int:
     """
     Count all top-level (without submodules and subpackages) modnames
     """
@@ -150,7 +164,7 @@ def count_top_level_modnames():
 
 
 @lru_cache(maxsize=128)
-def get_module_description(modname, max_lines=5):
+def get_module_description(modname: str, max_lines=5) -> str:
     """
     Attempt to get the module docstring and use it as description for search results
     """
@@ -175,7 +189,7 @@ def get_module_description(modname, max_lines=5):
     return desc
 
 
-def get_python_version():
+def get_python_version() -> str:
     """
     Python version string
     """
@@ -186,40 +200,73 @@ def get_python_version():
     )
 
 
+def show_empty_query_results() -> RenderResultListAction:
+    """
+    Show info about Python and installed packages and modules
+    """
+    return RenderResultListAction(
+        [
+            ExtensionResultItem(
+                icon="images/python.svg",
+                name=f"Python version: {get_python_version()}",
+                on_enter=DoNothingAction(),
+            ),
+            ExtensionResultItem(
+                icon="images/enter-query.svg",
+                name=(
+                    "Top level packages and modules found: "
+                    f"{count_top_level_modnames()}"
+                ),
+                description="Please enter search query to begin...",
+                on_enter=DoNothingAction(),
+            ),
+        ]
+    )
+
+
+def get_mod_file_path(mod_query: str) -> Union[str, None]:
+    """
+    Get the path to the module Python file
+    """
+    modname = mod_query.rstrip(".")
+    module = sys.modules.get(modname, None)
+    return module.__file__ if module else None
+
+
 # pylint: disable=too-few-public-methods
 class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
 
-    def on_event(self, event, extension):
+    def on_event(
+        self, event: KeywordQueryEvent, extension: Type[Extension]
+    ) -> Type[BaseAction]:
         """
         Handle keyword query event.
         """
         # assuming only one ulauncher keyword
+        kw = event.get_keyword()
         arg = event.get_argument()
         if not arg:
-            return RenderResultListAction(
-                [
-                    ExtensionResultItem(
-                        icon="images/python.svg",
-                        name=f"Python version: {get_python_version()}",
-                        on_enter=DoNothingAction(),
-                    ),
-                    ExtensionResultItem(
-                        icon="images/enter-query.svg",
-                        name=(
-                            "Top level packages and modules found: "
-                            f"{count_top_level_modnames()}"
-                        ),
-                        description="Please enter search query to begin...",
-                        on_enter=DoNothingAction(),
-                    ),
-                ]
-            )
+            return show_empty_query_results()
 
         # Find all accessible modules that match the query
-        results = search_modules(arg, iter_all_modules())
+        has_exact_match, results = search_modules(arg, iter_all_modules())
 
         items = []
+
+        # Offer to open exactly matching module file in text editor
+        if has_exact_match:
+            mod_path = get_mod_file_path(arg)
+            if mod_path:
+                items.append(
+                    ExtensionSmallResultItem(
+                        icon="images/enter-query.svg",
+                        name=f"Open {mod_path}",
+                        on_enter=OpenAction(mod_path),
+                        highlightable=False,
+                    )
+                )
+
         for res in results[:MAX_RESULTS_VISIBLE]:
             url = f"{extension.pydoc_server_url}{res.pydoc_url}"
             items.append(
@@ -228,6 +275,7 @@ class KeywordQueryEventListener(EventListener):
                     name=res.name,
                     description=get_module_description(res.name),
                     on_enter=OpenUrlAction(url),
+                    on_alt_enter=SetUserQueryAction(f"{kw} {res.name}."),
                 )
             )
         if len(results) > MAX_RESULTS_VISIBLE:
