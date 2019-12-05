@@ -5,7 +5,7 @@ Main entrypoint of the extension.
 import signal
 import sys
 from pydoc import _start_server, _url_handler
-from pydoc_ext.extension import PydocExtension, iter_all_modules
+from pydoc_ext.extension import PydocExtension, iter_all_module_names
 
 
 def shutdown_and_exit(serverthread):
@@ -22,7 +22,7 @@ def main():
     Launch the pydoc http server and the extension
     """
     # The first module walk is slow - later ones will be much faster
-    for _ in iter_all_modules():
+    for _ in iter_all_module_names():
         pass
 
     # Launch the pydoc HTTP server on random port
