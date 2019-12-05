@@ -3,10 +3,11 @@ EXT_DIR=com.github.pbkhrv.ulauncher-pydoc
 EXT_BACKUP_PATH=/tmp/ulauncher-dev-extension-backups
 
 init:
-	pip3 install -r dev/requirements.txt
+	pip3 install -r scripts/requirements.txt
 
 test:
 	pylint main.py ${EXT_PKG}/
+	mypy main.py
 	eval "PYTHONPATH=`pwd` py.test -v --doctest-modules --flake8 tests/ ${EXT_PKG}/"
 
 run_ul:
