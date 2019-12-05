@@ -8,6 +8,7 @@ import pkgutil
 from typing import NamedTuple, Iterable, Tuple, List, Type, Optional
 from functools import lru_cache
 import platform
+import re
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent
@@ -68,16 +69,6 @@ class NestedNameSearchResultItem(NamedTuple):
     basename_exact_match: int
     # How well the last part of the name matches the query, using Ulauncher's algo
     leafname_match_score: float
-
-
-class FullNameSearchResultItem(NamedTuple):
-    """
-    Ranking scores for the "full names" search mode
-    """
-
-    module_name: str
-    head_match_score: float
-    tail_match_score: float
 
 
 def score_modname_query_match(
@@ -186,11 +177,104 @@ def search_modules_nested(
     return (has_exact_match, names)
 
 
-# def search_modules_full(query: str, all_modnames: Iterable[str]) -> List[str]:
-#    """
-#    Search full module names, not restricted by nesting level of the query.
-#    Rank and sort the results.
-#    """
+class FullNameSearchResultItem(NamedTuple):
+    """
+    Ranking scores for the "full names" search mode
+    """
+
+    module_name: str
+    head_match_score: float
+    tail_match_score: float
+    tail_exact_contains: int
+
+
+def ordered_char_list_regex(chars):
+    """
+    Turn a list of characters into a regex pattern that matches them all in order
+    """
+    return ".*?".join(re.escape(char) for char in chars)
+
+
+def search_modules_full(query: str, all_modnames: Iterable[str]) -> List[str]:
+    """
+    Rank and sort modnames by how well they match a wildcard query.
+    Nesting of the names doesn't matter.
+
+    Treat first asterisk as a wildcard that can match any part of the name:
+
+    >>> search_modules_full('ht*error', ['http', 'http.cli.error', 'http.cli'])[0]
+    'http.cli.error'
+
+    Module names must contain all characters from the first part of the query
+    to be included in the results:
+
+    >>> search_modules_full('ul*action', ['ulauncher.shared.action', 'cozmo.actions'])
+    ['ulauncher.shared.action']
+
+    Query can also start with a wildcard, in which case the first part doesn't matter:
+
+    >>> len(search_modules_full('*action', ['http.cli.action', 'boo.action']))
+    2
+
+    Dots can be used in any part of the query:
+
+    >>> search_modules_full('ht.c*t.', ['http.client.err', 'http.server.request'])
+    ['http.client.err']
+
+    Exact matches of the query's tail are scored higher, to allow for quick lookup
+    of modules with known names:
+
+    >>> search_modules_full('*widg', ['ulauncher.api.itemwidget', 'wedge'])[0]
+    'ulauncher.api.itemwidget'
+
+    """
+
+    # Split the query into 2 parts: head and tail, separated by an asterisk
+    qhead, _, qtail = query.lower().partition("*")
+
+    # Every character in the "head" part of the query
+    # must be present in the given order, so we turn it into a regex pattern
+    head_regex = ordered_char_list_regex(qhead) if qhead else None
+
+    result_items = []
+    for name in all_modnames:
+        # The search is case insensitive
+        name = name.lower()
+        name_lower = name.lower()
+        if head_regex:
+            # If head is present, it regex must match
+            head_match = re.search(head_regex, name_lower)
+
+            # Head and tail parts of the name don't overlap
+            name_tail_idx = head_match.span()[1] if head_match else 0
+            name_tail = name_lower[name_tail_idx:]
+        else:
+            # If the wildcard was the first character in the query,
+            # then every name matches it, and we treat the whole name as "tail"
+            head_match = True
+            name_tail = name_lower
+
+        if head_match:
+            head_score = fuzzy_search.get_score(qhead, name_lower) if qhead else 0
+            tail_score = fuzzy_search.get_score(qtail, name_tail) if qtail else 0
+            result_items.append(
+                FullNameSearchResultItem(
+                    module_name=name,
+                    head_match_score=head_score,
+                    tail_match_score=tail_score,
+                    tail_exact_contains=1 if qtail in name_tail else 0,
+                )
+            )
+
+    def sort_key(item):
+        return (
+            item.tail_exact_contains,
+            item.tail_match_score,
+            item.head_match_score,
+            item.module_name,
+        )
+
+    return [res.module_name for res in sorted(result_items, key=sort_key, reverse=True)]
 
 
 def count_top_level_modnames() -> int:
@@ -310,7 +394,11 @@ class KeywordQueryEventListener(EventListener):
             return show_empty_query_results()
 
         # Find all accessible modules that match the query
-        has_exact_match, names = search_modules_nested(arg, iter_all_modules())
+        if "*" in arg:
+            has_exact_match = False
+            names = search_modules_full(arg, iter_all_modules())
+        else:
+            has_exact_match, names = search_modules_nested(arg, iter_all_modules())
 
         items = []
 
