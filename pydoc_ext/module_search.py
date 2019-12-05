@@ -187,7 +187,6 @@ def search_fullname(query: str, module_names: Iterable[str]) -> List[str]:
     result_items = []
     for name in module_names:
         # The search is case insensitive
-        name = name.lower()
         name_lower = name.lower()
         if head_regex:
             # If head is present, it regex must match
