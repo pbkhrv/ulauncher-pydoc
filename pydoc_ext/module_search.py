@@ -198,10 +198,9 @@ def search_fullname(query: str, module_names: Iterable[str]) -> List[str]:
         else:
             # If the wildcard was the first character in the query,
             # then every name matches it, and we treat the whole name as "tail"
-            head_match = True
             name_tail = name_lower
 
-        if head_match:
+        if not head_regex or head_match:
             head_score = fuzzy_search.get_score(qhead, name_lower) if qhead else 0
             tail_score = fuzzy_search.get_score(qtail, name_tail) if qtail else 0
             result_items.append(

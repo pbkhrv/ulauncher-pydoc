@@ -4,11 +4,11 @@ Main entrypoint of the extension.
 """
 import signal
 import sys
-from pydoc import _start_server, _url_handler
+from pydoc import _start_server, _url_handler  # type: ignore
 from pydoc_ext.extension import PydocExtension, iter_all_module_names
 
 
-def shutdown_and_exit(serverthread):
+def shutdown_and_exit(serverthread) -> None:
     """
     Gracefully shutdown the server.
     """
@@ -17,7 +17,7 @@ def shutdown_and_exit(serverthread):
     sys.exit(0)
 
 
-def main():
+def main() -> None:
     """
     Launch the pydoc http server and the extension
     """

@@ -177,7 +177,7 @@ class KeywordQueryEventListener(EventListener):
         else:
             has_exact_match, names = search_nested(arg, iter_all_module_names())
 
-        items = []
+        items: List[Type[ResultItem]] = []
 
         # Offer to open the matching module source file in text editor
         if has_exact_match:
