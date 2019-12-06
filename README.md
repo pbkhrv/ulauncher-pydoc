@@ -43,40 +43,56 @@ https://github.com/pbkhrv/ulauncher-pydoc
 
 ## Development
 
-Install necessary packages:
+I use the following tools while working on this extension:
 
-`pip install -r scripts/requirements.txt`
+- [`Black`](https://github.com/psf/black) code formatter
+- `pytest`
+- `pylint` with the `flake8` plugin
+- `mypy` static type checker
 
-Run unit tests:
+You can install them in one shot (except for `Black` - that's up to you) by running:
 
-`make test`
+```shell
+pip install -r scripts/requirements.txt
+```
 
-Backup the "production" version of the extension and symlink the development versioninto the Ulauncher's extension directory:
+Check PEP8 compliance, perform static type analysis and run unit tests:
 
-`make symlink`
+```shell
+make test
+```
+
+Backup the "production" version of the extension and symlink the development version into Ulauncher's extension directory:
+
+```shell
+make symlink
+```
 
 Quit Ulauncher. Then run it in debug mode:
 
-`make run_ul`
+```shell
+make run_ul
+```
 
-Run extension in the terminal, connecting to Ulauncher in debug mode:
+Run extension in the terminal, connect it to Ulauncher in debug mode:
 
-`make run`
+```shell
+make run
+```
 
 (if that doesn't work, check the connection string URL printed out by Ulauncher and modify the Makefile accordingly.)
 
 Unlink the development version of the extension from Ulauncher and replace it with whatever was there before:
 
-`make unlink`
-
+```shell
+make unlink
+```
 
 ## Contributions
 
 Issues and pull requests are welcome!
 
-If you do decide to contribute, please format the code with [`Black`](https://github.com/psf/black) or something like it, and run it through `pylint` and `flake8` (`make test` does that last step for you).
-
 
 ## License
 
-[MIT license](LICENSE)
+MIT license. See [LICENSE](LICENSE) file for details.
