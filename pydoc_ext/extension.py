@@ -5,7 +5,7 @@ Displays documentation in the browser using Python pydoc's built-in HTTP server
 """
 import sys
 import pkgutil
-from typing import Iterable, List, Type, Optional
+from typing import Iterable, List, Optional
 from functools import lru_cache
 import platform
 from ulauncher.api.client.Extension import Extension
@@ -138,7 +138,7 @@ class PydocExtension(Extension):
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
 
 
-def items_open_source_file(mod_query: str) -> List[Type[ResultItem]]:
+def items_open_source_file(mod_query: str) -> List[ResultItem]:
     """
     Find corresponding source file and show an "Open ....py" result item
     """
@@ -160,8 +160,8 @@ class KeywordQueryEventListener(EventListener):
     """ KeywordQueryEventListener class manages user input """
 
     def on_event(
-        self, event: KeywordQueryEvent, extension: Type[Extension]
-    ) -> Type[BaseAction]:
+        self, event: KeywordQueryEvent, extension: Extension
+    ) -> BaseAction:
         """
         Handle keyword query event.
         """
@@ -177,7 +177,7 @@ class KeywordQueryEventListener(EventListener):
         else:
             has_exact_match, names = search_nested(arg, iter_all_module_names())
 
-        items: List[Type[ResultItem]] = []
+        items: List[ResultItem] = []
 
         # Offer to open the matching module source file in text editor
         if has_exact_match:
