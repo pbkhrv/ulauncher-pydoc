@@ -37,5 +37,6 @@ def main() -> None:
     # Shutdown
     shutdown_and_exit(serverthread)
 
+
 if __name__ == "__main__":
     main()
